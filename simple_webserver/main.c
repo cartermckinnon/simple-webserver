@@ -35,8 +35,7 @@ char* buffers[NUM_THREADS];                             // connection buffers
 struct sockaddr_in serv_addr,cli_addr[NUM_THREADS];     // server and client addresses
 int online;                                             // status of server
 pthread_t threads[NUM_THREADS];                         // thread handles
-static int num_clients = 0;                             // number of clients
-int avail[NUM_THREADS];                                 // client id's
+static int avail[NUM_THREADS];                                 // client id's
 pthread_mutex_t mutex;                                  // thread syncronization
 
 
@@ -80,7 +79,7 @@ int main(int argc, const char * argv[])
     /* initialize mutex */
     pthread_mutex_init(&mutex, NULL);
     
-    /* initialize available client ID's */
+    /* initialize client ID's */
     for( int i = 0; i < NUM_THREADS; i++){
         avail[i] = NUM_THREADS;
     }
@@ -95,16 +94,15 @@ int main(int argc, const char * argv[])
 void parse_args(int argc, const char* argv[] )
 {
     // check number of args
-    if( argc != 3 ) error("usage: webserver <port #> <root directory>");
+    if( argc != 3 ) error("usage: webserver <port #> <root directory>\n");
     
     // check if port in range
     port = atoi(argv[1]);
-    if( port == 0 ) error("port number must be greater than zero.");
+    if( port == 0 ) error("port number must be greater than zero.\n");
     
     // save root directory
     dir = malloc(strlen(argv[2])+1);
     strcpy(dir, argv[2]);
-    //dir[strlen(argv[2])] = '\0';
     
     // verify dir exists
     if (0 != access(dir, F_OK)) {
@@ -134,43 +132,38 @@ void prepare_socket()
     /* bind socket */
     if( bind(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0 ){
         error("Coulnd't bind socket");}
+    
+    /* go online */
     listen(sock, 5);    // 5 is the standard maximum for waiting socket clients
     online = 1;
-    printf("\nSocket created, listening, & bound to port %d",port);
-    printf("\nAccepting connections at %d",serv_addr.sin_addr.s_addr);
+    printf("\n______________________________");
+    printf("\n    Listening on port %d",port);
+    printf("\n______ EXIT WITH CTRL+C ______");
+    fflush(stdout);
 }
 
 void accept_connections()
 {
     cli_addr_len = sizeof(cli_addr);
     while(online){
-        if( num_clients < NUM_THREADS-1 ){
-            //printf("\nWaiting for connection...");
-            int id = add_client();
-            //printf("\nGot ID: %d",id);
-            fflush(stdout);
-            if( id != NUM_THREADS ){
-                bzero(&cli_addr, sizeof(struct sockaddr_in));
-                connections[id] = accept(sock, (struct sockaddr*) &cli_addr[id], (unsigned int *)&cli_addr_len);
-                if ( connections[id] < 0 ){
-                    printf("Error accepting client.\n");
-                }
-                else{
-                    //printf("\nHave a connection! client %d",id);
-                    if( pthread_create(&threads[id], NULL, serve, &avail[id]) == 0){
-                        //printf("\nCreated thread %d",id);
-                    }
-                }
-            }
+        int id = add_client();
+        if( id != NUM_THREADS ){
+            bzero(&cli_addr, sizeof(struct sockaddr_in));
+            connections[id] = accept(sock,
+                                     (struct sockaddr*) &cli_addr[id],
+                                     (unsigned int *)&cli_addr_len);
+            if ( connections[id] < 0 ){ error("Error accepting client.\n"); }
+            else if ( pthread_create(&threads[id], NULL, serve, &avail[id]) != 0 ){ error("Couldn't create thread"); }
         }
     }
 }
 
 void* serve(void* arg)
 {
-    int id = *((int*)arg);          // local copy of id makes following code cleaner
+    /* allocate resources */
+    int id = *((int*)arg);                  // local copy of id makes following code cleaner
     buffers[id] = malloc(BUFFER_SIZE);      // create buffer for session
-    int timeout = 0;                // timeout counter; 3 1-second empty reads until session ends
+    int timeout = 0;                        // timeout counter; 3 1-second empty reads until session ends
     
     /* serving client */
     while( is_online() && timeout < 3 )
@@ -179,56 +172,51 @@ void* serve(void* arg)
         n[id] = (int)read(connections[id],buffers[id],BUFFER_SIZE);   // read from socket
         
         // if there's nothing to read
-        if( n[id] <= 0 ){
-            timeout++;      // increment timeout counter
-        }
+        if( n[id] <= 0 ){ timeout++; /*increment timeout counter*/ }
         else{
-            
             /* save host name from buffer */
-            char* end = strnstr(buffers[id], "Host: ", 256);     // find beginning of filename
-            char* start = end + 6;
-            end = strnstr(start, "\r", 32);
-            int host_len = (int)(end - start);               // find length of filename
-            char host[host_len+1];
-            strncpy(host, start, host_len);              // copy filename, buffer about to be wiped
-            host[host_len] = '\0';
+            char* end = strnstr(buffers[id], "Host: ", 256);    // find beginning of host name
+            char* start = end + 6;                              // most past "Host: "
+            end = strnstr(start, "\r", 32);                     // find end of host name
+            int host_len = (int)(end - start);                  // find length of host name
+            char host[host_len+1];                              // create storage
+            strncpy(host, start, host_len);                     // copy name
+            host[host_len] = '\0';                              // add nullchar (strncpy doesn't)
             
             send_header(id, get_header(id, buffers[id], host_len));   // parse what was read & send response header
             if( file_exists(buffers[id])){
                 send_data(id, file_open(buffers[id]), NULL);          // send HTTP payload
             }
-            else{
-                char url[100];
+            else{   // if file doesn't exist
+                char url[100]; // url used in templated 404 page
                 snprintf(url, 100, "http://%s%s",host,buffers[id]+strlen(dir));
-                printf("URL: %s",url);
                 send_data(id, file_open("404.html"), url);
             }
+            /* NO CONNECTIONS ARE PERSISTANT--if response was sent, close connection */
             break;
         }
     }
     
     /* ending session */
-    free(buffers[id]);
-    //printf("\nThread %d exiting",id);
-    //fflush(stdout);
-    sub_client(id);
-    pthread_exit(NULL);
+    free(buffers[id]);  // deallocate buffer
+    sub_client(id);     // deallocate client ID
+    pthread_exit(NULL); // end thread
     return NULL;
 }
 
 char* get_header(int id, char* packet, int host_len)
 {
-    char* request = strnstr(packet, "GET", 32);
-    if( request != NULL ){
-        
+    char* request = strnstr(packet, "GET", 32);     // search for GET--ONLY METHOD SUPPORTED
+    if( request != NULL )
+    {
         /* if no page specified */
         if( strnstr(packet, " / ", 16) != NULL ){
             file_build_path(id, "/index.html ");     // default to index.html
         }
         
         /* if page is specified */
-        else if( strnstr(packet, "/", 16) != NULL ){
-            file_build_path(id, packet);
+        else if( strnstr(packet, " /", 16) != NULL ){
+            file_build_path(id, packet);                // build dir + filename path in buffer
         }
         
         /* verify file exists, then generate header */
@@ -248,18 +236,18 @@ char* get_header(int id, char* packet, int host_len)
             if( strnstr(buffers[id], ".js", 50) != NULL ){
                 return header_helper(id, 200, "OK", "Application/javascript", file_size(buffers[id]), (int)strlen(buffers[id]));
             }
-            return header_helper(id, 200,"OK", "text", file_size(buffers[id]), (int)strlen(buffers[id]));
+            return header_helper(id, 200,"OK", "text", file_size(buffers[id]), (int)strlen(buffers[id]));   // default text content
         }
         
         /* if file doesn't exist, generate 404 */
         else{
-            int filename_len = (int)(strlen(buffers[id])-strlen(dir));
-            int url_len = 7;                                // length of "http://"
+            int filename_len = (int)(strlen(buffers[id])-strlen(dir));  // length of filename without full dir path
+            int url_len = 7;    // length of "http://"
             // <HTML> + "http://" + <host:port> + <file>
-            int content_len = file_size("404.html") - 1     // length of 404 HTML minus '*' (template marker)
-            + url_len
-            + host_len
-            + filename_len;
+            int content_len = file_size("404.html") - 1
+                              + url_len
+                              + host_len
+                              + filename_len;
             return header_helper(id, 404, "Not Found", "text/html", content_len, (int)strlen(buffers[id]));
         }
     }
@@ -268,18 +256,18 @@ char* get_header(int id, char* packet, int host_len)
 
 char* header_helper(int id, int status_code, char* status_msg, char* content_type, int content_length, int filename_length)
 {
-    char* header = buffers[id] + filename_length + 1;     // write header after the file path in buffer.
+    char* header = buffers[id] + filename_length + 1;     // write header after file path in the buffer
     snprintf(header,
-             115,
+             120,   // limit on header length to avoid overflow in small buffers
              "HTTP/1.1 %d %s\r\n"
              "Content-Type: %s\r\n"
              "Content-Length: %d\r\n"
              "Connection: close\r\n"
              "\r\n", status_code, status_msg, content_type, content_length);
-    
     return header;
 }
 
+/* send header to client */
 void send_header(int id, char* header)
 {
     if( header != NULL ){
@@ -287,15 +275,10 @@ void send_header(int id, char* header)
         void* pos = header;
         while (n > 0) {
             int bytes_written = (int)send(connections[id], pos, n, 0);
-            if (bytes_written <= 0) {
-                error("Couldn't send header.");
-            }
+            if (bytes_written <= 0) { error("Couldn't send header."); }
             n -= bytes_written;
             pos += bytes_written;
         }
-    }
-    else{
-        printf("\n\nNULL header.\n\n");
     }
 }
 
@@ -303,10 +286,8 @@ void send_data(int id, int input_file, char* dynamic)
 {
     /* handle missing file cases */
     if( input_file == -1 ){
-        input_file = open("404.html",O_RDONLY, S_IREAD);
-        if( input_file == -1 ){
-            error("Necessary files missing: 404.html");
-        }
+        input_file = open("404.html",O_RDONLY, S_IREAD);                        // 404 if specified file missing
+        if( input_file == -1 ){ error("Necessary files missing: 404.html"); }   // error if 404 template missing
     }
     /* clear buffer */
     bzero(buffers[id], BUFFER_SIZE);
@@ -372,11 +353,10 @@ void send_data(int id, int input_file, char* dynamic)
 /* open file for reading only */
 int file_open(char* file)
 {
-    int result =  open(file, O_RDONLY);
-    printf("\n%s = %d",file,result);
-    return result;
+    return open(file, O_RDONLY);
 }
 
+/* get file size in bytes */
 int file_size(char* file)
 {
     struct stat st;
@@ -384,6 +364,7 @@ int file_size(char* file)
     return (int)st.st_size;
 }
 
+/* check if file exists */
 int file_exists(char* file)
 {
     if (0 == access(file, 0)) {
@@ -392,37 +373,18 @@ int file_exists(char* file)
     return 0;
 }
 
+/* build root dir + filename path at beginning of buffer */
 void file_build_path(int id, char* packet)
 {
-    /* 1 -- build file path in buffer */
-    char* start = strnstr(packet, "/", 100);     // find beginning of filename
-    char* end = strnstr(start, " ", 100);        // find end of filename
+    char* start = strnstr(packet, "/", 100);    // find beginning of filename
+    char* end = strnstr(start, " ", 100);       // find end of filename
     int len = (int)(end - start);               // find length of filename
-    char filename[len+1];
+    char filename[len+1];                       // allocate storage
     strncpy(filename, start, len);              // copy filename, buffer about to be wiped
-    filename[len] = '\0';
-    bzero(buffers[id], BUFFER_SIZE);
-    strncpy(buffers[id], dir, strlen(dir));             // copy base directory to buffer
+    filename[len] = '\0';                       // add null (strncpy doesn't)
+    bzero(buffers[id], BUFFER_SIZE);            // clear buffer
+    strncpy(buffers[id], dir, strlen(dir));     // copy root dir to buffer
     strncpy(buffers[id]+strlen(dir), filename, len+1);    // add filename to path
-}
-
-/* Stop & join threads, close sockets, do deallocations, & exit. */
-void cleanup_and_exit()
-{
-    printf("\n\nCleaning up...");
-    go_offline();
-    for( int i = 0; i < NUM_THREADS; i++ ){
-        pthread_join(threads[i], NULL);
-    }
-    printf("\nthreads terminated...");
-    for( int i = 0; i < NUM_THREADS; i++ ){
-        close(connections[i]);
-    }
-    close(sock);
-    printf("\nsockets/connections closed...");
-    free(dir);
-    printf("\ngoodbye!");
-    exit(0);
 }
 
 /* allocates client id */
@@ -430,13 +392,12 @@ int add_client()
 {
     int e = 0;
     pthread_mutex_lock(&mutex);
-    num_clients++;                          // increment number of clients
-    while( avail[e] != NUM_THREADS && e < NUM_THREADS ){       // find available id for client
-        e++;                                // return NUM_THREADS if none available
+    while( (avail[e] != NUM_THREADS) && (e < NUM_THREADS) ){    // find available id for client
+        e++;
     }
     if( e < NUM_THREADS ){ avail[e] = e; }    // if id allocated, mark as used
     pthread_mutex_unlock(&mutex);
-    if( e== NUM_THREADS ){
+    if( e == NUM_THREADS ){
         return NUM_THREADS;
     }
     return e;
@@ -446,8 +407,7 @@ int add_client()
 void sub_client(int id)
 {
     pthread_mutex_lock(&mutex);
-    num_clients--;
-    avail[id] = NUM_THREADS;
+    avail[id] = NUM_THREADS;        // mark client ID as available
     pthread_mutex_unlock(&mutex);
 }
 
@@ -467,6 +427,25 @@ void go_offline()
     pthread_mutex_lock(&mutex);
     online = 0;
     pthread_mutex_unlock(&mutex);
+}
+
+/* Stop & join threads, close sockets, free malloc's, & exit. */
+void cleanup_and_exit()
+{
+    printf("\n\nCleaning up...");
+    go_offline();
+    for( int i = 0; i < NUM_THREADS; i++ ){
+        pthread_join(threads[i], NULL);
+    }
+    printf("\nthreads terminated...");
+    for( int i = 0; i < NUM_THREADS; i++ ){
+        close(connections[i]);
+    }
+    close(sock);
+    printf("\nsockets/connections closed...");
+    free(dir);
+    printf("\ngoodbye!");
+    exit(0);
 }
 
 /* error handler */
