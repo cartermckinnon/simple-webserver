@@ -138,7 +138,7 @@ void prepare_socket()
     online = 1;
     printf("\n______________________________"
            "\n    Listening on port %d"
-           "\n______ EXIT WITH CTRL+C ______",port);
+           "\n______ EXIT WITH CTRL+C ______\r",port);
 }
 
 void accept_connections()
