@@ -136,9 +136,9 @@ void prepare_socket()
     /* go online */
     listen(sock, 5);    // 5 is the standard maximum for waiting socket clients
     online = 1;
-    printf("\n______________________________");
-    printf("\n    Listening on port %d",port);
-    printf("\n______ EXIT WITH CTRL+C ______");
+    printf("\n______________________________"
+           "\n    Listening on port %d"
+           "\n______ EXIT WITH CTRL+C ______",port);
 }
 
 void accept_connections()
