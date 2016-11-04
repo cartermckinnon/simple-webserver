@@ -147,7 +147,7 @@ void accept_connections()
     while(online){
         int id = add_client();
         if( id != NUM_THREADS ){
-            bzero(&cli_addr, sizeof(struct sockaddr_in));
+            bzero(&cli_addr[id], sizeof(struct sockaddr_in));
             connections[id] = accept(sock,
                                      (struct sockaddr*) &cli_addr[id],
                                      (unsigned int *)&cli_addr_len);
@@ -199,10 +199,10 @@ void* serve(void* arg)
     }
     
     /* ending session */
-    free(buffers[id]);  // deallocate buffer
-    sub_client(id);     // deallocate client ID
-    pthread_detach(threads[id]);
-    pthread_exit(NULL); // end thread
+    shutdown(connections[id], 2);   // close connection
+    free(buffers[id]);              // deallocate buffer
+    sub_client(id);                 // deallocate client ID
+    pthread_detach(threads[id]);    // deatch thread to deallocate resources
     return NULL;
 }
 
