@@ -139,7 +139,6 @@ void prepare_socket()
     printf("\n______________________________");
     printf("\n    Listening on port %d",port);
     printf("\n______ EXIT WITH CTRL+C ______");
-    fflush(stdout);
 }
 
 void accept_connections()
@@ -444,7 +443,7 @@ void cleanup_and_exit()
     close(sock);
     printf("\nsockets/connections closed...");
     free(dir);
-    printf("\ngoodbye!");
+    printf("\ngoodbye!\n");
     exit(0);
 }
 
