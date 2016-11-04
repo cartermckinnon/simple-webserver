@@ -136,9 +136,7 @@ void prepare_socket()
     /* go online */
     listen(sock, 5);    // 5 is the standard maximum for waiting socket clients
     online = 1;
-    printf("\n______________________________"
-           "\n    Listening on port %d"
-           "\n______ EXIT WITH CTRL+C ______",port);
+    printf("\n______________________________\n    Listening on port %d\n______ EXIT WITH CTRL+C ______\r\n",port);
 }
 
 void accept_connections()
@@ -431,7 +429,7 @@ void go_offline()
 /* Stop & join threads, close sockets, free malloc's, & exit. */
 void cleanup_and_exit()
 {
-    printf("\n\nCleaning up...");
+    printf("\nCleaning up...");
     go_offline();
     for( int i = 0; i < NUM_THREADS; i++ ){
         pthread_join(threads[i], NULL);
