@@ -19,6 +19,7 @@
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <limits.h>
+#include "strnstr.c"
 
 /* _____ OPTIONS _____ */
 #define NUM_THREADS 4       // number of clients
@@ -59,7 +60,7 @@ char* header_helper(int id,
 void send_header(int connection, char* header); // send header to client
 void send_data(int connection,
                int file,
-               char* _Nullable dynamic_page);   // send data from (templated optional) file to client
+               char* dynamic_page);   // send data from (templated optional) file to client
 int file_open(char* file);                      // open file for reading
 int file_size(char* file);                      // get file size in bytes
 int file_exists(char* file);                    // check if file exists
