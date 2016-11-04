@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		AD0EA2771DCBA00300FD9666 /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = AD0EA2761DCBA00300FD9666 /* main.c */; };
+		AD0EA27F1DCC627F00FD9666 /* strnstr.c in Sources */ = {isa = PBXBuildFile; fileRef = AD0EA27E1DCC627F00FD9666 /* strnstr.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -25,6 +26,9 @@
 /* Begin PBXFileReference section */
 		AD0EA2731DCBA00300FD9666 /* simple_webserver */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = simple_webserver; sourceTree = BUILT_PRODUCTS_DIR; };
 		AD0EA2761DCBA00300FD9666 /* main.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = main.c; sourceTree = "<group>"; };
+		AD0EA27D1DCC627F00FD9666 /* setup.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = setup.sh; sourceTree = "<group>"; };
+		AD0EA27E1DCC627F00FD9666 /* strnstr.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = strnstr.c; sourceTree = "<group>"; };
+		AD0EA2801DCC62A300FD9666 /* 404.html */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.html; path = 404.html; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -57,7 +61,10 @@
 		AD0EA2751DCBA00300FD9666 /* simple_webserver */ = {
 			isa = PBXGroup;
 			children = (
+				AD0EA2801DCC62A300FD9666 /* 404.html */,
 				AD0EA2761DCBA00300FD9666 /* main.c */,
+				AD0EA27D1DCC627F00FD9666 /* setup.sh */,
+				AD0EA27E1DCC627F00FD9666 /* strnstr.c */,
 			);
 			path = simple_webserver;
 			sourceTree = "<group>";
@@ -119,6 +126,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AD0EA27F1DCC627F00FD9666 /* strnstr.c in Sources */,
 				AD0EA2771DCBA00300FD9666 /* main.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
