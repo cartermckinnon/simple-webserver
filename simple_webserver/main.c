@@ -21,7 +21,7 @@
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <limits.h>
-#include "strnstr.c"
+//#include "strnstr.c"
 
 /* _____ OPTIONS _____ */
 #define NUM_THREADS 4       // number of clients
@@ -152,7 +152,9 @@ void accept_connections()
                                      (struct sockaddr*) &cli_addr[id],
                                      (unsigned int *)&cli_addr_len);
             if ( connections[id] < 0 ){ error("Error accepting client.\n"); }
-            else if ( pthread_create(&threads[id], PTHREAD_CREATE_DETACHED, serve, &avail[id]) != 0 ){ error("Couldn't create thread"); }
+            else if ( pthread_create(&threads[id], NULL, serve, &avail[id]) != 0 ){
+                error("Couldn't create thread");
+            }
         }
     }
 }
@@ -199,6 +201,7 @@ void* serve(void* arg)
     /* ending session */
     free(buffers[id]);  // deallocate buffer
     sub_client(id);     // deallocate client ID
+    pthread_detach(threads[id]);
     pthread_exit(NULL); // end thread
     return NULL;
 }
