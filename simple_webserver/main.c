@@ -4,6 +4,8 @@
 |
 | THANKS:
 | socket library overview-> http://www.linuxhowtos.org/C_C++/socket.htm
+| strnstr() implementation-> http://stackoverflow.com/questions/23999797/implementing-strnstr
+| ^ Creative Commons license. 
 */
 
 #include <stdio.h>
@@ -27,16 +29,16 @@
 
 
 /* _____ GLOBALS _____ */
-int port;                                               // port number
-char* dir;                                              // root directory
-int sock, cli_addr_len, n[NUM_THREADS];                 // socket handle;
-int connections[NUM_THREADS];                           // connection handles
-char* buffers[NUM_THREADS];                             // connection buffers
-struct sockaddr_in serv_addr,cli_addr[NUM_THREADS];     // server and client addresses
-int online;                                             // status of server
-pthread_t threads[NUM_THREADS];                         // thread handles
+static int port;                                               // port number
+static char* dir;                                              // root directory
+static int sock, cli_addr_len, n[NUM_THREADS];                 // socket handle;
+static int connections[NUM_THREADS];                           // connection handles
+static char* buffers[NUM_THREADS];                             // connection buffers
+static struct sockaddr_in serv_addr,cli_addr[NUM_THREADS];     // server and client addresses
+static int online;                                             // status of server
+static pthread_t threads[NUM_THREADS];                         // thread handles
 static int avail[NUM_THREADS];                                 // client id's
-pthread_mutex_t mutex;                                  // thread syncronization
+static pthread_mutex_t mutex;                                  // thread syncronization
 
 
 /* _____ FUNCTIONS _____ */
@@ -150,7 +152,7 @@ void accept_connections()
                                      (struct sockaddr*) &cli_addr[id],
                                      (unsigned int *)&cli_addr_len);
             if ( connections[id] < 0 ){ error("Error accepting client.\n"); }
-            else if ( pthread_create(&threads[id], NULL, serve, &avail[id]) != 0 ){ error("Couldn't create thread"); }
+            else if ( pthread_create(&threads[id], PTHREAD_CREATE_DETACHED, serve, &avail[id]) != 0 ){ error("Couldn't create thread"); }
         }
     }
 }
