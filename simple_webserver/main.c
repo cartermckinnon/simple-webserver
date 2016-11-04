@@ -21,7 +21,7 @@
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <limits.h>
-//#include "strnstr.c"
+#include "strnstr.c"
 
 /* _____ OPTIONS _____ */
 #define NUM_THREADS 4       // number of clients
