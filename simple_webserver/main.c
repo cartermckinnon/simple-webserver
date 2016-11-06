@@ -21,7 +21,7 @@
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <limits.h>
-//#include "strnstr.c"      // necessary for many Linux systems.
+#include "strnstr.c"        // necessary for many Linux systems.
                             // (BSD varients often implement strnstr() in the standard C lib.)
 
 /* _____ OPTIONS _____ */
@@ -62,6 +62,7 @@ char* header_helper(int id,
                     char* content_type,
                     int packet_length,
                     int filename_length);       // prints header to thread's buffer
+char* redirect_helper(int id, char* url);       // prints status 301 header to thread's buffer
 void send_header(int connection, char* header); // send header to client
 void send_data(int connection,
                int file,
@@ -69,7 +70,8 @@ void send_data(int connection,
 int file_open(char* file);                      // open file for reading
 int file_size(char* file);                      // get file size in bytes
 int file_exists(char* file);                    // check if file exists
-void file_build_path(int id, char* packet);     // combine root directory w/ requested file's path
+void file_build_path(int id, char* packet);     // combine root directory w/ requested file's path in thread's buffer
+char* url_build(int id, char* packet);           // build url in thread's buffer
 void go_offline();                              // first step in exit--break all loops
 int is_online();                                // check online status
 void cleanup_and_exit();                        // go_offline, cleanup memory, join threads, and exit (called w/ CTRL+C)
@@ -188,14 +190,16 @@ void* serve(void* arg)
             strncpy(host, start, host_len);                     // copy name
             host[host_len] = '\0';                              // add nullchar (strncpy doesn't)
             
-            send_header(id, get_header(id, buffers[id], host_len));   // parse what was read & send response header
-            if( file_exists(buffers[id])){
-                send_data(id, file_open(buffers[id]), NULL);          // send HTTP payload
-            }
-            else{   // if file doesn't exist
-                char url[100]; // url used in templated 404 page
-                snprintf(url, 100, "http://%s%s",host,buffers[id]+strlen(dir));
-                send_data(id, file_open("404.html"), url);
+            send_header(id, get_header(id, buffers[id], host_len));     // parse what was read & send response header
+            if( strnstr(buffers[id], "http://",7) == NULL ){            // if not a redirect
+                if( file_exists(buffers[id])){
+                    send_data(id, file_open(buffers[id]), NULL);          // send HTTP payload
+                }
+                else{   // if file doesn't exist
+                    char url[100]; // url used in templated 404 page
+                    snprintf(url, 100, "http://%s%s",host,buffers[id]+strlen(dir));
+                    send_data(id, file_open("404.html"), url);
+                }
             }
             /* NO CONNECTIONS ARE PERSISTANT--if response was sent, close connection */
             break;
@@ -206,17 +210,22 @@ void* serve(void* arg)
     shutdown(connections[id], 2);   // close connection
     free(buffers[id]);              // deallocate buffer
     sub_client(id);                 // deallocate client ID
-    pthread_detach(threads[id]);    // deatch thread to deallocate resources
+    pthread_detach(threads[id]);    // detach thread to deallocate resources
     return NULL;
 }
 
 char* get_header(int id, char* packet, int host_len)
 {
-    char* request = strnstr(packet, "GET", 32);     // search for GET--ONLY METHOD SUPPORTED
+    char* request = strnstr(packet, "GET", 32);     // search for GET
     if( request != NULL )
     {
+        /* if /go/ redirect specified */
+        if( strnstr(packet, " /go/", 16) != NULL){
+            return redirect_helper(id, url_build(id, packet));
+        }
+        
         /* if no page specified */
-        if( strnstr(packet, " / ", 16) != NULL ){
+        else if( strnstr(packet, " / ", 16) != NULL ){
             file_build_path(id, "/index.html ");     // default to index.html
         }
         
@@ -245,7 +254,7 @@ char* get_header(int id, char* packet, int host_len)
             return header_helper(id, 200,"OK", "text", file_size(buffers[id]), (int)strlen(buffers[id]));   // default text content
         }
         
-        /* if file doesn't exist, generate 404 */
+        /* if file doesn't exist, generate 404 from template */
         else{
             int filename_len = (int)(strlen(buffers[id])-strlen(dir));  // length of filename without full dir path
             int url_len = 7;    // length of "http://"
@@ -257,9 +266,11 @@ char* get_header(int id, char* packet, int host_len)
             return header_helper(id, 404, "Not Found", "text/html", content_len, (int)strlen(buffers[id]));
         }
     }
-    return NULL;
+    return NULL;    // shouldn't happen, but necessary for thread function prototype
+                    // and useful for error detection.
 }
 
+/* print generic response header to buffer */
 char* header_helper(int id, int status_code, char* status_msg, char* content_type, int content_length, int filename_length)
 {
     char* header = buffers[id] + filename_length + 1;     // write header after file path in the buffer
@@ -270,6 +281,18 @@ char* header_helper(int id, int status_code, char* status_msg, char* content_typ
              "Content-Length: %d\r\n"
              "Connection: close\r\n"
              "\r\n", status_code, status_msg, content_type, content_length);
+    return header;
+}
+
+/* print status 301 header in buffer for redirect functionality */
+char* redirect_helper(int id, char* url)
+{
+    char* header = buffers[id] + strlen(url) + 1;     // write header after file path in the buffer
+    snprintf(header,
+             120,   // limit on header length to avoid overflow in small buffers
+             "HTTP/1.1 301 Moved Permanently\r\n"
+             "Location: %s\r\n"
+             "\r\n", url);
     return header;
 }
 
@@ -391,6 +414,20 @@ void file_build_path(int id, char* packet)
     bzero(buffers[id], BUFFER_SIZE);            // clear buffer
     strncpy(buffers[id], dir, strlen(dir));     // copy root dir to buffer
     strncpy(buffers[id]+strlen(dir), filename, len+1);    // add filename to path
+}
+
+char* url_build(int id, char* packet){
+    char* start = strnstr(packet, "/go/", 100); // find beginning of hostname
+    start += 4;                                  // move past "/go/"
+    char* end = strnstr(start, " ", 100);       // find end of hostname
+    int len = (int)(end - start);               // find length of filename
+    char hostname[len+1];                       // allocate storage
+    strncpy(hostname, start, len);              // copy hostname, buffer about to be wiped
+    hostname[len] = '\0';                       // add null (strncpy doesn't)
+    bzero(buffers[id], BUFFER_SIZE);            // clear buffer
+    int url_components = 7 + 4 + 4 + 1;         // "http://" + "www." + ".com\0"
+    snprintf(buffers[id], len+url_components, "http://www.%s.com",hostname);
+    return buffers[id];
 }
 
 /* allocates client id */
