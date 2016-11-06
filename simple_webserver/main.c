@@ -24,8 +24,8 @@
 #include "strnstr.c"
 
 /* _____ OPTIONS _____ */
-#define NUM_THREADS 4       // number of clients
-#define BUFFER_SIZE 256     // size of client buffer
+#define NUM_THREADS 1       // number of clients
+#define BUFFER_SIZE 256     // size of client buffer in bytes; minimum 256
 
 
 /* _____ GLOBALS _____ */
@@ -441,9 +441,9 @@ void cleanup_and_exit()
     }
     printf("\nthreads terminated...");
     for( int i = 0; i < NUM_THREADS; i++ ){
-        close(connections[i]);
+        shutdown(connections[i], 2);
     }
-    close(sock);
+    shutdown(sock, 2);
     printf("\nsockets/connections closed...");
     free(dir);
     printf("\ngoodbye!\n");
