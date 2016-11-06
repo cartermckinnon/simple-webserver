@@ -21,8 +21,8 @@
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <limits.h>
-#include "strnstr.c"        // necessary for many Linux systems.
-                            // (BSD varients often implement strnstr() in the standard C lib.)
+#include "strnstr.c"      // necessary for many Linux systems.
+                          // (BSD varients often implement strnstr() in the standard C lib.)
 
 /* _____ OPTIONS _____ */
 #define NUM_THREADS 4       // number of threads, number of simultaneous requests handled.
@@ -482,9 +482,9 @@ void cleanup_and_exit()
     }
     printf("\nthreads terminated...");
     for( int i = 0; i < NUM_THREADS; i++ ){
-        close(connections[i]);
+        shutdown(connections[i], 2);
     }
-    close(sock);
+    shutdown(sock, 2);
     printf("\nsockets/connections closed...");
     free(dir);
     printf("\ngoodbye!\n");
