@@ -21,11 +21,15 @@
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <limits.h>
-#include "strnstr.c"
+#include "strnstr.c"      // necessary for many Linux systems.
+                          // (BSD varients often implement strnstr() in the standard C lib.)
 
 /* _____ OPTIONS _____ */
-#define NUM_THREADS 1       // number of clients
-#define BUFFER_SIZE 256     // size of client buffer in bytes; minimum 256
+#define NUM_THREADS 4       // number of threads, number of simultaneous requests handled.
+                            /* (Because no connection is persistant, a higher number will result
+                               in increased performance for a single client and for multiple clients,
+                               up to a point. Optimal number would be the number of hardware threads. ) */
+#define BUFFER_SIZE 256     // size of client buffer
 
 
 /* _____ GLOBALS _____ */
@@ -47,8 +51,8 @@ int add_client();                               // allocate client id
 void sub_client();                              // deallocate client id
 void parse_args(int argc, const char* argv[] ); // parse command line arguments
 void prepare_socket();                          // create & bind socket
-void accept_connections();                      // listen for & accept connections
-void* serve(void* client);                      // serve client
+void accept_connections();                      // listen for & deploy connections to threads
+void* serve(void* client);                      // serve client (thread workload)
 char* get_header(int id,
                  char* packet,
                  int hostname_len);             // generate header for response
@@ -61,14 +65,14 @@ char* header_helper(int id,
 void send_header(int connection, char* header); // send header to client
 void send_data(int connection,
                int file,
-               char* dynamic_page);   // send data from (templated optional) file to client
+               char* dynamic_page);             // send data from (templated) file to client
 int file_open(char* file);                      // open file for reading
 int file_size(char* file);                      // get file size in bytes
 int file_exists(char* file);                    // check if file exists
-void file_build_path(int id, char* packet);     // combine root directory w/ requested file path
-void go_offline();                              // set loop variable to 0; exit step 1
+void file_build_path(int id, char* packet);     // combine root directory w/ requested file's path
+void go_offline();                              // first step in exit--break all loops
 int is_online();                                // check online status
-void cleanup_and_exit();                        // go offline, cleanup memory, join threads, and exit (w/ CTRL+C)
+void cleanup_and_exit();                        // go_offline, cleanup memory, join threads, and exit (called w/ CTRL+C)
 
 int main(int argc, const char * argv[])
 {
@@ -138,7 +142,7 @@ void prepare_socket()
     /* go online */
     listen(sock, 5);    // 5 is the standard maximum for waiting socket clients
     online = 1;
-    printf("\n______________________________\n    Listening on port %d\n______ EXIT WITH CTRL+C ______\r\n",port);
+    printf("\n------------------------------\n    Listening on port %d\n       EXIT WITH CTRL+C       \n------------------------------\r\n",port);
 }
 
 void accept_connections()
