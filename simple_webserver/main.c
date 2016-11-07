@@ -21,7 +21,7 @@
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <limits.h>
-#include "strnstr.c"      // necessary for many Linux systems.
+//#include "strnstr.c"      // necessary for many Linux systems.
                           // (BSD varients often implement strnstr() in the standard C lib.)
 
 /* _____ OPTIONS _____ */
@@ -29,7 +29,8 @@
                             /* (Because no connection is persistant, a higher number will result
                                in increased performance for a single client and for multiple clients,
                                up to a point. Optimal number would be the number of hardware threads. ) */
-#define BUFFER_SIZE 256     // size of client buffer
+#define BUFFER_SIZE 1024     // size of client buffer
+#define MOBILE_USER_AGENTS "mobile_ids"     // file containing list of mobile User-Agent ID's
 
 
 /* _____ GLOBALS _____ */
@@ -43,6 +44,7 @@ static int online;                                             // status of serv
 static pthread_t threads[NUM_THREADS];                         // thread handles
 static int avail[NUM_THREADS];                                 // client id's
 static pthread_mutex_t mutex;                                  // thread syncronization
+char* mobile_ids;                                              // list of mobile 'User-Agent' id's
 
 
 /* _____ FUNCTIONS _____ */
@@ -71,9 +73,12 @@ int file_open(char* file);                      // open file for reading
 int file_size(char* file);                      // get file size in bytes
 int file_exists(char* file);                    // check if file exists
 void file_build_path(int id, char* packet);     // combine root directory w/ requested file's path in thread's buffer
+void file_build_mobile_path(int id, char* packet); // combine root directory + "/mobile" + file name in thread's buffer
 char* url_build(int id, char* packet);           // build url in thread's buffer
 void go_offline();                              // first step in exit--break all loops
 int is_online();                                // check online status
+void load_mobile_ids(char* filename);           // load list of mobile User-Agents into mobile_ids
+int mobile_user(char* packet);                  // determine whether a packet uses a supported mobile User-Agent
 void cleanup_and_exit();                        // go_offline, cleanup memory, join threads, and exit (called w/ CTRL+C)
 
 int main(int argc, const char * argv[])
@@ -150,6 +155,9 @@ void prepare_socket()
 void accept_connections()
 {
     cli_addr_len = sizeof(cli_addr);
+    if( file_exists(MOBILE_USER_AGENTS) ){
+        load_mobile_ids(MOBILE_USER_AGENTS);
+    }
     while(online){
         int id = add_client();
         if( id != NUM_THREADS ){
@@ -225,13 +233,21 @@ char* get_header(int id, char* packet, int host_len)
         }
         
         /* if no page specified */
-        else if( strnstr(packet, " / ", 16) != NULL ){
-            file_build_path(id, "/index.html ");     // default to index.html
+        else if( strnstr(packet, " / ", 16) != NULL ){      // default "/" to "/index.html"
+            if( mobile_user(packet) ){
+                file_build_mobile_path(id, "/index.html");  // if mobile user
+            } else {
+                file_build_path(id, "/index.html ");        // if non-mobile
+            }
         }
         
         /* if page is specified */
         else if( strnstr(packet, " /", 16) != NULL ){
-            file_build_path(id, packet);                // build dir + filename path in buffer
+            if( mobile_user(packet) ){
+                file_build_mobile_path(id, packet);     // if mobile user
+            } else {
+                file_build_path(id, packet);            // if non-mobile
+            }
         }
         
         /* verify file exists, then generate header */
@@ -311,6 +327,7 @@ void send_header(int id, char* header)
     }
 }
 
+/* Send input_file to client, optionally filling dynamic template data */
 void send_data(int id, int input_file, char* dynamic)
 {
     /* handle missing file cases */
@@ -416,6 +433,22 @@ void file_build_path(int id, char* packet)
     strncpy(buffers[id]+strlen(dir), filename, len+1);    // add filename to path
 }
 
+/* Builds root dir + "/mobile* + filename path at beginning of buffer */
+void file_build_mobile_path(int id, char* packet)
+{
+    char* start = strnstr(packet, "/", 100);    // find beginning of filename
+    char* end = strnstr(start, " ", 100);       // find end of filename
+    int len = (int)(end - start) + 8;           // find length of filename + "/mobile"
+    char filename[len+1];                       // allocate storage
+    snprintf(filename, len, "/mobile%s",start); // add "/mobile" to file name
+    //strncpy(filename, start, len);            // copy filename, buffer about to be wiped
+    filename[len] = '\0';                       // add null (strncpy doesn't)
+    bzero(buffers[id], BUFFER_SIZE);            // clear buffer
+    strncpy(buffers[id], dir, strlen(dir));     // copy root dir to buffer
+    strncpy(buffers[id]+strlen(dir), filename, len);    // add filename to path
+}
+
+/* builds URL of requested file based on packet's request line and "Host:" value */
 char* url_build(int id, char* packet){
     char* start = strnstr(packet, "/go/", 100); // find beginning of hostname
     start += 4;                                  // move past "/go/"
@@ -472,6 +505,35 @@ void go_offline()
     pthread_mutex_unlock(&mutex);
 }
 
+/* Loads a line-separated list of mobile User-Agents from filename */
+void load_mobile_ids(char* filename)
+{
+    mobile_ids = malloc(file_size(filename));
+    if( (int)read(file_open(filename), mobile_ids, file_size(filename)) != file_size(filename)){
+        error("Couldn't load mobile User-Agent ID's");
+    }
+}
+
+
+/* Determine whether a client is a mobile user */
+/* compares the list of mobile User-Agent ID's stored
+   in mobile_ids to the User-Agent of packet. */
+int mobile_user(char* packet)
+{
+    char* start = strstr(packet, "User-Agent: ");
+    if( start == NULL ){ return 0; }
+    start += 12;
+    int len = 27;               // 27 characters is enough to detect mobile User-Agent, while disregarding
+                                // specific browser versions/platform numbers
+                                // Based on tests with iOS devices and Android, this threshold was necessary in order to
+                                // make maintaning a list of User-Agents easier.
+    char useragent[len+1];
+    strncpy(useragent, start, len);
+    useragent[len] = '\0';
+    if( strstr(mobile_ids, useragent) == NULL){ return 0; }
+    return 1;
+}
+
 /* Stop & join threads, close sockets, free malloc's, & exit. */
 void cleanup_and_exit()
 {
@@ -487,6 +549,7 @@ void cleanup_and_exit()
     shutdown(sock, 2);
     printf("\nsockets/connections closed...");
     free(dir);
+    if( mobile_ids != NULL){ free(mobile_ids); }
     printf("\ngoodbye!\n");
     exit(0);
 }
