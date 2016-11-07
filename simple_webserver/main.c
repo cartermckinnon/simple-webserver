@@ -29,7 +29,7 @@
                             /* (Because no connection is persistant, a higher number will result
                                in increased performance for a single client and for multiple clients,
                                up to a point. Optimal number would be the number of hardware threads. ) */
-#define BUFFER_SIZE 1024     // size of client buffer
+#define BUFFER_SIZE 512     // size of client buffer
 #define MOBILE_USER_AGENTS "mobile_ids"     // file containing list of mobile User-Agent ID's
 
 
@@ -104,6 +104,7 @@ int main(int argc, const char * argv[])
     accept_connections();
 }
 
+/* parse CLI arguments */
 void parse_args(int argc, const char* argv[] )
 {
     // check number of args
@@ -130,6 +131,7 @@ void parse_args(int argc, const char* argv[] )
     }
 }
 
+/* create & bind socket */
 void prepare_socket()
 {
     /* create socket */
@@ -152,6 +154,7 @@ void prepare_socket()
     printf("\n------------------------------\n    Listening on port %d\n       EXIT WITH CTRL+C       \n------------------------------\r\n",port);
 }
 
+/* accept socket connections, spin up thread and hand off session to thread */
 void accept_connections()
 {
     cli_addr_len = sizeof(cli_addr);
@@ -173,6 +176,7 @@ void accept_connections()
     }
 }
 
+/* thread workload -- respond to client requests */
 void* serve(void* arg)
 {
     /* allocate resources */
@@ -222,6 +226,7 @@ void* serve(void* arg)
     return NULL;
 }
 
+/* build response header based on request packet */
 char* get_header(int id, char* packet, int host_len)
 {
     char* request = strnstr(packet, "GET", 32);     // search for GET
@@ -449,7 +454,8 @@ void file_build_mobile_path(int id, char* packet)
 }
 
 /* builds URL of requested file based on packet's request line and "Host:" value */
-char* url_build(int id, char* packet){
+char* url_build(int id, char* packet)
+{
     char* start = strnstr(packet, "/go/", 100); // find beginning of hostname
     start += 4;                                  // move past "/go/"
     char* end = strnstr(start, " ", 100);       // find end of hostname
@@ -523,7 +529,7 @@ int mobile_user(char* packet)
     char* start = strstr(packet, "User-Agent: ");
     if( start == NULL ){ return 0; }
     start += 12;
-    int len = 27;               // 27 characters is enough to detect mobile User-Agent, while disregarding
+    int len = 25;               // 27 characters is enough to detect mobile User-Agent, while disregarding
                                 // specific browser versions/platform numbers
                                 // Based on tests with iOS devices and Android, this threshold was necessary in order to
                                 // make maintaning a list of User-Agents easier.
