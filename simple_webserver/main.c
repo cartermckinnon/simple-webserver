@@ -21,7 +21,7 @@
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <limits.h>
-//#include "strnstr.c"      // necessary for many Linux systems.
+#include "strnstr.c"      // necessary for many Linux systems.
                           // (BSD varients often implement strnstr() in the standard C lib.)
 
 /* _____ OPTIONS _____ */
