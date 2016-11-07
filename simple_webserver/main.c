@@ -3,9 +3,10 @@
 |  Created by Carter McKinnon on 10/25/16.
 |
 | THANKS:
-| socket library overview-> http://www.linuxhowtos.org/C_C++/socket.htm
-| strnstr() implementation-> http://stackoverflow.com/questions/23999797/implementing-strnstr
-| ^ Creative Commons license. 
+| - socket library overview-> http://www.linuxhowtos.org/C_C++/socket.htm
+| - strnstr() implementation-> http://stackoverflow.com/questions/23999797/implementing-strnstr
+|    ^ Creative Commons license.
+| - mobile User-Agents-> http://www.zytrax.com/tech/web/mobile_ids.html
 */
 
 #include <stdio.h>
@@ -22,14 +23,16 @@
 #include <fcntl.h>
 #include <limits.h>
 //#include "strnstr.c"      // necessary for many Linux systems.
-                          // (BSD varients often implement strnstr() in the standard C lib.)
+                            // (BSD varients often implement strnstr() in the standard C lib.)
 
 /* _____ OPTIONS _____ */
-#define NUM_THREADS 4       // number of threads, number of simultaneous requests handled.
+#define NUM_THREADS 8       // number of threads, number of simultaneous requests handled.
                             /* (Because no connection is persistant, a higher number will result
                                in increased performance for a single client and for multiple clients,
                                up to a point. Optimal number would be the number of hardware threads. ) */
-#define BUFFER_SIZE 512     // size of client buffer
+
+#define BUFFER_SIZE 512     // size of client buffer in bytes, minimum 512
+
 #define MOBILE_USER_AGENTS "mobile_ids"     // file containing list of mobile User-Agent ID's
 
 
@@ -352,29 +355,20 @@ void send_data(int id, int input_file, char* dynamic)
             bytes_read = (int)read(input_file, buffers[id], BUFFER_SIZE);       // Read data into buffer.
         }
         else{
-            bytes_read = (int)read(input_file, read_pos, 1);       // Read data into buffer.
+            bytes_read = (int)read(input_file, read_pos, 1);                    // Read data into buffer.
             read_pos++;
         }
         if (bytes_read == 0){ break; }                                      // Exit if nothing to read.
         if (bytes_read < 0){ error("Couldn't read file into buffer"); }     // Handle errors.
         if( dynamic != NULL ){
-            
-            /* 1 char read test for exit condition
-             is necessary in dynamic case. Because
-             of this, first char cannot be template ('*') */
-            bytes_read = (int)read(input_file, read_pos, 1);
-            if (bytes_read == 0){ break; }                                      // Exit if nothing to read.
-            if (bytes_read < 0){ error("Couldn't read file into buffer"); }     // Handle errors.
-            read_pos++;
-            
             /* render template */
-            while ( bytes_read <= BUFFER_SIZE ) {
-                int new_bytes = (int)read(input_file, read_pos, 1);
-                if (new_bytes == 0){ break; }                                          // Exit if nothing to read.
-                if (new_bytes < 0){ error("Couldn't read file into buffer"); }         // Handle errors.
-                bytes_read += new_bytes;
-                if( *read_pos == '*' ){
-                    while( (*dyn_pos != '\0') && (bytes_read <= BUFFER_SIZE) ){
+            while ( bytes_read <= BUFFER_SIZE ) {                                       // while buffer has space
+                int new_bytes = (int)read(input_file, read_pos, 1);                     // read 1 byte at a time
+                if (new_bytes == 0){ break; }                                           // Exit if nothing to read.
+                if (new_bytes < 0){ error("Couldn't read file into buffer"); }          // Handle errors.
+                bytes_read += new_bytes;                                                // increment bytes_read
+                if( *read_pos == '*' ){                                                 // if current char is template marker '*'
+                    while( (*dyn_pos != '\0') && (bytes_read <= BUFFER_SIZE) ){         // insert dynamic data at marker
                         *read_pos = *dyn_pos;
                         read_pos++;
                         dyn_pos++;
@@ -382,7 +376,7 @@ void send_data(int id, int input_file, char* dynamic)
                     }
                 }
                 else{
-                    read_pos++;
+                    read_pos++;                                                         // if current != '*', continue reading
                 }
             }
         }
